@@ -3,7 +3,17 @@ import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/protocol/packets/ping.dart';
 
-enum Headers { ping }
+enum Headers {
+  ping,
+  alert,
+  accessAccount,
+  createAccount,
+  deleteAccount,
+  characterList,
+  createCharacter,
+  deleteCharacter,
+  selectCharacter,
+}
 
 abstract class Packet {
   late int header;
