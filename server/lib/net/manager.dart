@@ -127,9 +127,29 @@ class Manager {
     }
   }
 
-  Future<void> sendToAll(Packet packet) async {}
+  Future<void> sendToAll(Packet packet) async {
+    for (var i in _cache.players.getFilledSlots()) {
+      final player = _cache.players.get(i);
 
-  Future<void> sendToAllExcept(Player player, Packet packet) async {}
+      if (player == null) {
+        continue;
+      }
+
+      await sendTo(player, packet);
+    }
+  }
+
+  Future<void> sendToAllExcept(Player except, Packet packet) async {
+    for (var i in _cache.players.getFilledSlots()) {
+      final player = _cache.players.get(i);
+
+      if (player == null || player == except) {
+        continue;
+      }
+
+      await sendTo(player, packet);
+    }
+  }
 
   Future<void> stop(HttpServer server) async {
     for (var i in _cache.players.getFilledSlots()) {
