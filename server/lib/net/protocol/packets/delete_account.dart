@@ -5,11 +5,11 @@ import 'package:server/net/manager.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/utils/services.dart';
 
-class CreateAccount implements Packet {
+class DeleteAccount implements Packet {
   final Services _services;
   late Manager _manager;
 
-  CreateAccount() : _services = Services() {
+  DeleteAccount() : _services = Services() {
     _manager = _services.get<Manager>();
   }
 
