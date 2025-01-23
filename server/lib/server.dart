@@ -34,7 +34,8 @@ class Server {
             ..statusCode = HttpStatus.forbidden
             ..write('O acesso HTTP não é permitido')
             ..close();
-          return;
+
+          continue;
         }
 
         final WebSocket socket = await WebSocketTransformer.upgrade(request);

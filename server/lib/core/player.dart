@@ -6,7 +6,6 @@ class Player {
   final int id;
   final WebSocket _socket;
   Writer sendBuffer;
-  Writer receiverBuffer;
   final String _address;
 
   String getAddress() {
@@ -21,7 +20,6 @@ class Player {
     this.id,
     this._socket,
     this.sendBuffer,
-    this.receiverBuffer,
     this._address,
   );
 

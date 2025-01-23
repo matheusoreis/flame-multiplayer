@@ -1,6 +1,7 @@
+import 'package:server/core/constants.dart';
 import 'package:server/core/player.dart';
 import 'package:server/utils/slots.dart';
 
 class Cache {
-  final Slots<Player> players = Slots<Player>(100);
+  final players = Slots<Player>(Constants.maxPlayers);
 }
