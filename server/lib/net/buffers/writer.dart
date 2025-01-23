@@ -10,6 +10,10 @@ class Writer {
     buffer = Uint8List(capacity);
   }
 
+  void seek(int n) {
+    offset = n;
+  }
+
   Uint8List getBuffer() {
     return Uint8List.view(buffer.buffer, 0, offset);
   }
