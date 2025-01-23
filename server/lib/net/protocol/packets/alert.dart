@@ -14,7 +14,7 @@ class Alert implements Packet {
   }
 
   @override
-  int header = Headers.ping.index;
+  int header = Headers.alert.index;
   late String message;
   late bool isNotification = false;
 
