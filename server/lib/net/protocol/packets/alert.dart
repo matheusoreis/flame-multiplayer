@@ -24,8 +24,8 @@ class Alert implements Packet {
   }
 
   @override
-  void handle(Player player) {
-    _manager.sendTo(player, this);
+  Future<void> handle(Player player) async {
+    await _manager.sendTo(player, this);
   }
 
   @override

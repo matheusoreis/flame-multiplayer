@@ -8,6 +8,7 @@ environment:
 
 dependencies:
   sqlite3: ^2.7.2
+  crypto: ^3.0.6
 
 dev_dependencies:
   lints: ^5.0.0

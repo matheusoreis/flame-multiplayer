@@ -25,7 +25,7 @@ class AccessAccount implements Packet {
   }
 
   @override
-  void handle(Player player) {
+  Future<void> handle(Player player) async {
     _manager.sendTo(player, this);
   }
 

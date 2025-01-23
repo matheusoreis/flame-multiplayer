@@ -22,7 +22,7 @@ abstract class Packet {
 
   void serialize(Writer writer);
   void deserialize(Reader reader);
-  void handle(Player player);
+  Future<void> handle(Player player);
 }
 
 final Map<Headers, Packet Function()> packets = {
