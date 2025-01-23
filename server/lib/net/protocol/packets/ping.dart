@@ -15,24 +15,19 @@ class Ping implements Packet {
 
   @override
   int header = Headers.ping.index;
-  late String content;
 
   @override
   void deserialize(Reader reader) {
-    content = reader.string();
+    return;
   }
 
   @override
   void handle(Player player) {
-    print('O jogador ${player.getAddress()} enviou o pacote do ping');
-    print('Contendo: $content');
-
     _manager.sendTo(player, this);
   }
 
   @override
   void serialize(Writer writer) {
     writer.u16(header);
-    writer.string('Olá cliente, seja vem vindo ao servidor!');
   }
 }
