@@ -11,10 +11,17 @@ void main() async {
 
     final writer = Writer(2048);
 
-    writer.u16(5);
+    writer.u16(6);
     writer.u16(1);
-    // writer.string('reisdev.matheus@gmail.com');
-    // writer.string('123456');
+    writer.string('Personagem1'); // Nome do personagem
+    writer.string('Azul'); // Cor do personagem
+    writer.boolean(true); // Sexo (true para masculino, false para feminino)
+    writer.string('Curto'); // Estilo de cabelo
+    writer.string('Preto'); // Cor do cabelo
+    writer.string('Azuis'); // Cor dos olhos
+    writer.string('Azul Claro'); // Cor dos olhos
+    writer.string('Camiseta'); // Roupa (camisa)
+    writer.string('Calças'); // Roupa (calças)
 
     socket.add(writer.getBuffer());
     print('Pacote enviado: ${writer.getBuffer()}');

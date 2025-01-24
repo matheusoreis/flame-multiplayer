@@ -62,7 +62,7 @@ class Sqlite {
     return result as List<Map<String, dynamic>>;
   }
 
-  Future<void> insertData(
+  Future<int> insertData(
     String query,
     List<dynamic> parameters,
   ) async {
@@ -72,8 +72,28 @@ class Sqlite {
       _QueryData(receivePort.sendPort, query, parameters, _dllPath, _dbPath),
     );
 
-    await receivePort.first;
+    final result = await receivePort.first;
     receivePort.close();
+
+    return result as int;
+  }
+
+  Future<void> executeTransaction(
+    Future<void> Function(Database db) transactionCallback,
+  ) async {
+    final db = sqlite3.open(_dbPath);
+
+    db.execute('BEGIN TRANSACTION');
+    try {
+      await transactionCallback(db);
+
+      db.execute('COMMIT');
+    } catch (e) {
+      db.execute('ROLLBACK');
+      rethrow;
+    } finally {
+      db.dispose();
+    }
   }
 
   static void _executeQueryInIsolate(_QueryData data) {
@@ -105,7 +125,11 @@ class Sqlite {
 
     stmt.execute(data.parameters);
 
-    data.sendPort.send('Data inserted successfully');
+    final int lastInsertId = db.select(
+      'SELECT last_insert_rowid() AS id',
+    )[0]['id'];
+
+    data.sendPort.send(lastInsertId);
 
     stmt.dispose();
     db.dispose();
