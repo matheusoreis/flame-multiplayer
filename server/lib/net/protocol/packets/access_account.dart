@@ -8,16 +8,19 @@ import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/manager.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
+import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class AccessAccount implements Packet {
   final Services _services;
   late Manager _manager;
   late Sqlite _sqlite;
+  late Logger _logger;
 
   AccessAccount() : _services = Services() {
     _manager = _services.get<Manager>();
     _sqlite = _services.get<Sqlite>();
+    _logger = _services.get<Logger>();
   }
 
   @override
@@ -32,39 +35,48 @@ class AccessAccount implements Packet {
     password = reader.string();
   }
 
+  Future<void> _sendAlert(Player player, String message) async {
+    final alert = Alert()
+      ..message = message
+      ..isNotification = true;
+
+    await _manager.sendTo(player, alert);
+  }
+
   @override
   Future<void> handle(Player player) async {
-    final passwordHash = sha256.convert(utf8.encode(password)).toString();
+    try {
+      final passwordHash = sha256.convert(utf8.encode(password)).toString();
 
-    final result = await _sqlite.executeQuery(
-      'SELECT * FROM accounts WHERE email = ?',
-      [email],
-    );
+      final result = await _sqlite.executeQuery(
+        'SELECT id, password FROM accounts WHERE email = ?',
+        [email],
+      );
 
-    if (result.isEmpty) {
-      final alert = Alert()
-        ..message = 'Usuário não encontrado!'
-        ..isNotification = true;
+      if (result.isEmpty) {
+        await _sendAlert(player, 'Usuário não encontrado!');
+        return;
+      }
 
-      await _manager.sendTo(player, alert);
+      final storedPassword = result[0]['password'] as String;
 
-      return;
+      if (storedPassword != passwordHash) {
+        await _sendAlert(player, 'Senha incorreta!');
+
+        return;
+      }
+
+      databaseId = result[0]['id'] as int;
+
+      _manager.sendTo(player, this);
+    } catch (e, stackTrace) {
+      _logger.error('Erro ao acessar conta: $e\n$stackTrace');
+
+      await _sendAlert(
+        player,
+        'Erro interno no servidor. Tente novamente mais tarde.',
+      );
     }
-
-    final storedPassword = result[0]['password'] as String;
-
-    if (storedPassword != passwordHash) {
-      final alert = Alert()
-        ..message = 'Senha incorreta!'
-        ..isNotification = true;
-
-      await _manager.sendTo(player, alert);
-
-      return;
-    }
-
-    databaseId = result[0]['id'];
-    _manager.sendTo(player, this);
   }
 
   @override
