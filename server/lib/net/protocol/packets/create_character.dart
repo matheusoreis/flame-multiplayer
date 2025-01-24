@@ -5,16 +5,19 @@ import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/manager.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
+import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class CreateCharacter implements Packet {
   final Services _services;
   late Manager _manager;
   late Sqlite _sqlite;
+  late Logger _logger;
 
   CreateCharacter() : _services = Services() {
     _manager = _services.get<Manager>();
     _sqlite = _services.get<Sqlite>();
+    _logger = _services.get<Logger>();
   }
 
   @override
@@ -64,7 +67,7 @@ class CreateCharacter implements Packet {
     return isNotEmpty ? characterCountResult[0]['COUNT(*)'] : 0;
   }
 
-  Future<void> _sendAlertToPlayer(Player player, String message) async {
+  Future<void> _sendAlert(Player player, String message) async {
     final alert = Alert()
       ..message = message
       ..isNotification = true;
@@ -74,44 +77,53 @@ class CreateCharacter implements Packet {
 
   @override
   Future<void> handle(Player player) async {
-    final characterSlots = await _getCharacterSlots();
-    final characterCount = await _getCharacterCount();
+    try {
+      final characterSlots = await _getCharacterSlots();
+      final characterCount = await _getCharacterCount();
 
-    if (characterCount >= characterSlots) {
-      await _sendAlertToPlayer(player, 'Você atingiu o limite de personagens!');
+      if (characterCount >= characterSlots) {
+        await _sendAlert(player, 'Você atingiu o limite de personagens!');
 
-      return;
+        return;
+      }
+
+      await _sqlite.executeTransaction((db) async {
+        db.execute(
+          'INSERT INTO characters (name, color, is_male, hair, hair_color, eye, eye_color, shirt, pants, created_at) '
+          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            name,
+            color,
+            isMale ? 1 : 0,
+            hair,
+            hairColor,
+            eye,
+            eyeColor,
+            shirt,
+            pants,
+            DateTime.now().toIso8601String(),
+          ],
+        );
+
+        final newCharacterId = db.select(
+          'SELECT last_insert_rowid() AS id',
+        )[0]['id'];
+
+        db.execute(
+          'INSERT INTO character_accounts (account_id, character_id) VALUES (?, ?)',
+          [databaseId, newCharacterId],
+        );
+      });
+
+      _manager.sendTo(player, this);
+    } catch (e, s) {
+      _logger.error('Erro ao criar o personagem: $e\n$s');
+
+      await _sendAlert(
+        player,
+        'Erro interno no servidor. Tente novamente mais tarde.',
+      );
     }
-
-    await _sqlite.executeTransaction((db) async {
-      db.execute(
-        'INSERT INTO characters (name, color, is_male, hair, hair_color, eye, eye_color, shirt, pants, created_at) '
-        'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          name,
-          color,
-          isMale ? 1 : 0,
-          hair,
-          hairColor,
-          eye,
-          eyeColor,
-          shirt,
-          pants,
-          DateTime.now().toIso8601String(),
-        ],
-      );
-
-      final newCharacterId = db.select(
-        'SELECT last_insert_rowid() AS id',
-      )[0]['id'];
-
-      db.execute(
-        'INSERT INTO character_accounts (account_id, character_id) VALUES (?, ?)',
-        [databaseId, newCharacterId],
-      );
-    });
-
-    _manager.sendTo(player, this);
   }
 
   @override

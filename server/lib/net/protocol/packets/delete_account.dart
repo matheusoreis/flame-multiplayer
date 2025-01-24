@@ -8,16 +8,19 @@ import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/manager.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
+import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class DeleteAccount implements Packet {
   final Services _services;
   late Manager _manager;
   late Sqlite _sqlite;
+  late Logger _logger;
 
   DeleteAccount() : _services = Services() {
     _manager = _services.get<Manager>();
     _sqlite = _services.get<Sqlite>();
+    _logger = _services.get<Logger>();
   }
 
   @override
@@ -31,42 +34,51 @@ class DeleteAccount implements Packet {
     password = reader.string();
   }
 
+  Future<void> _sendAlert(Player player, String message) async {
+    final alert = Alert()
+      ..message = message
+      ..isNotification = true;
+
+    await _manager.sendTo(player, alert);
+  }
+
   @override
   Future<void> handle(Player player) async {
-    final result = await _sqlite.executeQuery(
-      'SELECT * FROM accounts WHERE email = ?',
-      [email],
-    );
+    try {
+      final result = await _sqlite.executeQuery(
+        'SELECT * FROM accounts WHERE email = ?',
+        [email],
+      );
 
-    if (result.isEmpty) {
-      final alert = Alert()
-        ..message = 'Conta não encontrada!'
-        ..isNotification = true;
+      if (result.isEmpty) {
+        await _sendAlert(player, 'Conta não encontrada!');
 
-      await _manager.sendTo(player, alert);
+        return;
+      }
 
-      return;
+      final storedPassword = result[0]['password'] as String;
+      final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+
+      if (storedPassword != hashedPassword) {
+        await _sendAlert(player, 'Senha incorreta!');
+
+        return;
+      }
+
+      await _sqlite.executeQuery(
+        'DELETE FROM accounts WHERE email = ?',
+        [email],
+      );
+
+      await _manager.sendTo(player, this);
+    } catch (e, s) {
+      _logger.error('Erro ao apagar conta: $e\n$s');
+
+      await _sendAlert(
+        player,
+        'Erro interno no servidor. Tente novamente mais tarde.',
+      );
     }
-
-    final storedPassword = result[0]['password'] as String;
-    final hashedPassword = sha256.convert(utf8.encode(password)).toString();
-
-    if (storedPassword != hashedPassword) {
-      final alert = Alert()
-        ..message = 'Senha incorreta!'
-        ..isNotification = true;
-
-      await _manager.sendTo(player, alert);
-
-      return;
-    }
-
-    await _sqlite.executeQuery(
-      'DELETE FROM accounts WHERE email = ?',
-      [email],
-    );
-
-    await _manager.sendTo(player, this);
   }
 
   @override

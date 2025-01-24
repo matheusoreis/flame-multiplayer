@@ -69,8 +69,8 @@ class AccessAccount implements Packet {
       databaseId = result[0]['id'] as int;
 
       _manager.sendTo(player, this);
-    } catch (e, stackTrace) {
-      _logger.error('Erro ao acessar conta: $e\n$stackTrace');
+    } catch (e, s) {
+      _logger.error('Erro ao acessar conta: $e\n$s');
 
       await _sendAlert(
         player,
