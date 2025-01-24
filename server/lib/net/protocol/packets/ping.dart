@@ -7,6 +7,7 @@ import 'package:server/utils/services.dart';
 
 class Ping implements Packet {
   final Services _services;
+
   late Manager _manager;
 
   Ping() : _services = Services() {
@@ -23,7 +24,7 @@ class Ping implements Packet {
 
   @override
   Future<void> handle(Player player) async {
-    _manager.sendTo(player, this);
+    await _manager.sendTo(player, this);
   }
 
   @override

@@ -11,31 +11,39 @@ class _QueryData {
   final SendPort sendPort;
   final String query;
   final List<dynamic> parameters;
+  final String dllPath;
+  final String dbPath;
 
-  _QueryData(this.sendPort, this.query, this.parameters);
+  _QueryData(
+    this.sendPort,
+    this.query,
+    this.parameters,
+    this.dllPath,
+    this.dbPath,
+  );
 }
 
 class Sqlite {
   final Services _services;
-  late Logger _logger;
-  late Database _db;
+  late final Logger _logger;
+  late final String _dllPath;
+  late final String _dbPath;
 
   Sqlite() : _services = Services() {
     _logger = _services.get<Logger>();
 
-    final String path = 'bin/db/';
-    final String dllPath = '$path/sqlite3.dll';
+    _dllPath = 'bin/db/sqlite3.dll';
+    _dbPath = 'bin/db/sqlite.db';
 
-    if (!File(dllPath).existsSync()) {
-      throw ('A DLL do SQLite3 não foi encontrada em $dllPath!');
+    if (!File(_dllPath).existsSync()) {
+      throw ('A DLL do SQLite3 não foi encontrada em $_dllPath!');
     }
 
-    open.overrideFor(OperatingSystem.windows, () {
-      return DynamicLibrary.open(dllPath);
-    });
+    if (!File(_dbPath).existsSync()) {
+      throw ('O arquivo do banco de dados SQLite não foi encontrado em $_dbPath!');
+    }
 
-    _logger.info('SQLite3 carregado na versão ${sqlite3.version.libVersion}');
-    _db = sqlite3.open('bin/db/sqlite.db');
+    _logger.info('SQLite3 configurado com sucesso.');
   }
 
   Future<List<Map<String, dynamic>>> executeQuery(
@@ -43,17 +51,15 @@ class Sqlite {
     List<dynamic> parameters,
   ) async {
     final receivePort = ReceivePort();
-    final isolate = await Isolate.spawn(
-      _executeQuery,
-      _QueryData(receivePort.sendPort, query, parameters),
+    await Isolate.spawn(
+      _executeQueryInIsolate,
+      _QueryData(receivePort.sendPort, query, parameters, _dllPath, _dbPath),
     );
 
     final result = await receivePort.first;
-
     receivePort.close();
-    isolate.kill(priority: Isolate.immediate);
 
-    return result;
+    return result as List<Map<String, dynamic>>;
   }
 
   Future<void> insertData(
@@ -61,45 +67,47 @@ class Sqlite {
     List<dynamic> parameters,
   ) async {
     final receivePort = ReceivePort();
-    final isolate = await Isolate.spawn(
-      _insertData,
-      _QueryData(receivePort.sendPort, query, parameters),
+    await Isolate.spawn(
+      _insertDataInIsolate,
+      _QueryData(receivePort.sendPort, query, parameters, _dllPath, _dbPath),
     );
 
     await receivePort.first;
-
     receivePort.close();
-    isolate.kill(priority: Isolate.immediate);
   }
 
-  void _executeQuery(_QueryData data) {
-    final stmt = _db.prepare(data.query);
+  static void _executeQueryInIsolate(_QueryData data) {
+    open.overrideFor(OperatingSystem.windows, () {
+      return DynamicLibrary.open(data.dllPath);
+    });
+
+    final db = sqlite3.open(data.dbPath);
+    final stmt = db.prepare(data.query);
 
     final resultSet = stmt.select(data.parameters);
 
-    final result = resultSet.map((row) {
-      return {
-        'id': row['id'],
-        'name': row['name'],
-      };
-    }).toList();
+    final result =
+        resultSet.map((row) => Map<String, dynamic>.from(row)).toList();
 
     data.sendPort.send(result);
 
     stmt.dispose();
+    db.dispose();
   }
 
-  void _insertData(_QueryData data) {
-    final stmt = _db.prepare(data.query);
+  static void _insertDataInIsolate(_QueryData data) {
+    open.overrideFor(OperatingSystem.windows, () {
+      return DynamicLibrary.open(data.dllPath);
+    });
+
+    final db = sqlite3.open(data.dbPath);
+    final stmt = db.prepare(data.query);
 
     stmt.execute(data.parameters);
 
     data.sendPort.send('Data inserted successfully');
 
     stmt.dispose();
-  }
-
-  void close() {
-    _db.dispose();
+    db.dispose();
   }
 }

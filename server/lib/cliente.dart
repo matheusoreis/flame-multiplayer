@@ -11,8 +11,10 @@ void main() async {
 
     final writer = Writer(2048);
 
-    writer.u16(0);
-    writer.string('Ping!');
+    writer.u16(5);
+    writer.u16(1);
+    // writer.string('reisdev.matheus@gmail.com');
+    // writer.string('123456');
 
     socket.add(writer.getBuffer());
     print('Pacote enviado: ${writer.getBuffer()}');

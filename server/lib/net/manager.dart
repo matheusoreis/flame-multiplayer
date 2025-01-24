@@ -3,7 +3,6 @@ import 'dart:typed_data';
 
 import 'package:server/core/constants.dart';
 import 'package:server/core/player.dart';
-import 'package:server/db/sqlite.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/protocol/packet.dart';
@@ -15,12 +14,10 @@ class Manager {
   final Services _services;
   late final Logger _logger;
   late final Cache _cache;
-  late final Sqlite _sqlite;
 
   Manager() : _services = Services() {
     _logger = _services.get<Logger>();
     _cache = _services.get<Cache>();
-    _sqlite = _services.get<Sqlite>();
   }
 
   void websocketOpen(HttpRequest request, WebSocket socket) {
@@ -187,7 +184,6 @@ class Manager {
       );
     }
 
-    _sqlite.close();
     await server.close();
     exit(0);
   }

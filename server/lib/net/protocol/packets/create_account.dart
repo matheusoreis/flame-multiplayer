@@ -1,9 +1,13 @@
+import 'dart:convert';
+
+import 'package:crypto/crypto.dart';
 import 'package:server/core/player.dart';
 import 'package:server/db/sqlite.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/manager.dart';
 import 'package:server/net/protocol/packet.dart';
+import 'package:server/net/protocol/packets/alert.dart';
 import 'package:server/utils/services.dart';
 
 class CreateAccount implements Packet {
@@ -29,10 +33,29 @@ class CreateAccount implements Packet {
 
   @override
   Future<void> handle(Player player) async {
+    final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+
     final result = await _sqlite.executeQuery(
-      'SELECT * FROM users WHERE email = ?',
+      'SELECT * FROM accounts WHERE email = ?',
       [email],
     );
+
+    if (result.isNotEmpty) {
+      final alert = Alert()
+        ..message = 'Email já registrado!'
+        ..isNotification = true;
+
+      _manager.sendTo(player, alert);
+
+      return;
+    }
+
+    await _sqlite.insertData(
+      'INSERT INTO accounts (email, password) VALUES (?, ?)',
+      [email, hashedPassword],
+    );
+
+    _manager.sendTo(player, this);
   }
 
   @override
