@@ -6,6 +6,7 @@ import 'package:server/net/protocol/packets/character_list.dart';
 import 'package:server/net/protocol/packets/create_account.dart';
 import 'package:server/net/protocol/packets/create_character.dart';
 import 'package:server/net/protocol/packets/delete_account.dart';
+import 'package:server/net/protocol/packets/delete_character.dart';
 import 'package:server/net/protocol/packets/ping.dart';
 
 enum Headers {
@@ -35,4 +36,5 @@ final Map<Headers, Packet Function()> packets = {
   Headers.deleteAccount: () => DeleteAccount(),
   Headers.characterList: () => CharacterList(),
   Headers.createCharacter: () => CreateCharacter(),
+  Headers.deleteCharacter: () => DeleteCharacter(),
 };

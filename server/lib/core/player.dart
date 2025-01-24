@@ -5,7 +5,7 @@ import 'package:server/net/buffers/writer.dart';
 class Player {
   final int id;
   final WebSocket _socket;
-  Writer sendBuffer;
+  final Writer sendBuffer;
   final String _address;
 
   String getAddress() {

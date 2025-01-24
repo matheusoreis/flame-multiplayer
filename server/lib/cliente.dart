@@ -11,9 +11,11 @@ void main() async {
 
     final writer = Writer(2048);
 
-    writer.u16(2);
-    writer.string('reisdev.matheus@gmail.com');
-    writer.string('123456');
+    writer.u16(7);
+    writer.u16(1);
+    writer.u16(6);
+    // writer.string('reisdev.matheus@gmail.com');
+    // writer.string('123456');
     // writer.u16(1);
     // writer.string('Personagem1'); // Nome do personagem
     // writer.string('Azul'); // Cor do personagem
