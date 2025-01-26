@@ -2,10 +2,10 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:server/core/player.dart';
-import 'package:server/db/sqlite.dart';
+import 'package:server/db/postgres.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
 import 'package:server/utils/logger.dart';
@@ -13,13 +13,13 @@ import 'package:server/utils/services.dart';
 
 class DeleteAccount implements Packet {
   final Services _services;
-  late Manager _manager;
-  late Sqlite _sqlite;
+  late Listener _manager;
+  late Postgres _pg;
   late Logger _logger;
 
   DeleteAccount() : _services = Services() {
-    _manager = _services.get<Manager>();
-    _sqlite = _services.get<Sqlite>();
+    _manager = _services.get<Listener>();
+    _pg = _services.get<Postgres>();
     _logger = _services.get<Logger>();
   }
 
@@ -44,30 +44,38 @@ class DeleteAccount implements Packet {
 
   @override
   Future<void> handle(Player player) async {
+    if (player.getDatabaseId() == null) {
+      await _sendAlert(
+        player,
+        'Você precisa estar autenticado para apagar a conta.',
+      );
+
+      return;
+    }
+
     try {
-      final result = await _sqlite.executeQuery(
-        'SELECT * FROM accounts WHERE email = ?',
-        [email],
+      final result = await _pg.query(
+        'SELECT password FROM accounts WHERE email = @email',
+        parameters: {'email': email},
       );
 
       if (result.isEmpty) {
-        await _sendAlert(player, 'Conta não encontrada!');
+        await _sendAlert(player, 'Conta não encontrada.');
 
         return;
       }
 
-      final storedPassword = result[0]['password'] as String;
-      final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+      final storedPassword = result.first['password'] as String;
 
+      final hashedPassword = sha256.convert(utf8.encode(password)).toString();
       if (storedPassword != hashedPassword) {
         await _sendAlert(player, 'Senha incorreta!');
-
         return;
       }
 
-      await _sqlite.executeQuery(
-        'DELETE FROM accounts WHERE email = ?',
-        [email],
+      await _pg.query(
+        'DELETE FROM accounts WHERE email = @email',
+        parameters: {'email': email},
       );
 
       await _manager.sendTo(player, this);

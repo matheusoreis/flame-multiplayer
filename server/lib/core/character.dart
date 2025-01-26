@@ -37,7 +37,9 @@ class Character {
       map['eye_color'],
       map['shirt'],
       map['pants'],
-      DateTime.parse(map['created_at']),
+      map['created_at'] is String
+          ? DateTime.parse(map['created_at'])
+          : map['created_at'] as DateTime,
     );
   }
 

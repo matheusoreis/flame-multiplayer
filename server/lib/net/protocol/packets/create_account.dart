@@ -2,24 +2,25 @@ import 'dart:convert';
 
 import 'package:crypto/crypto.dart';
 import 'package:server/core/player.dart';
-import 'package:server/db/sqlite.dart';
+import 'package:server/db/postgres.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
+import 'package:server/utils/email.dart';
 import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class CreateAccount implements Packet {
   final Services _services;
-  late Manager _manager;
-  late Sqlite _sqlite;
+  late Listener _manager;
+  late Postgres _pg;
   late Logger _logger;
 
   CreateAccount() : _services = Services() {
-    _manager = _services.get<Manager>();
-    _sqlite = _services.get<Sqlite>();
+    _manager = _services.get<Listener>();
+    _pg = _services.get<Postgres>();
     _logger = _services.get<Logger>();
   }
 
@@ -45,26 +46,34 @@ class CreateAccount implements Packet {
   @override
   Future<void> handle(Player player) async {
     try {
-      final hashedPassword = sha256.convert(utf8.encode(password)).toString();
-
-      final result = await _sqlite.executeQuery(
-        'SELECT * FROM accounts WHERE email = ?',
-        [email],
-      );
-
-      if (result.isNotEmpty) {
-        final alert = Alert()
-          ..message = 'Email já registrado!'
-          ..isNotification = true;
-
-        _manager.sendTo(player, alert);
+      if (!isValidEmail(email)) {
+        await _sendAlert(player, 'O email fornecido não é válido.');
 
         return;
       }
 
-      await _sqlite.insertData(
-        'INSERT INTO accounts (email, password) VALUES (?, ?)',
-        [email, hashedPassword],
+      final existingAccounts = await _pg.query(
+        'SELECT id FROM accounts WHERE email = @email',
+        parameters: {'email': email},
+      );
+
+      if (existingAccounts.isNotEmpty) {
+        await _sendAlert(player, 'Já existe uma conta com este email.');
+
+        return;
+      }
+
+      final hashedPassword = sha256.convert(utf8.encode(password)).toString();
+
+      await _pg.query(
+        '''
+      INSERT INTO accounts (email, password, created_at)
+      VALUES (@Email, @Password, NOW())
+      ''',
+        parameters: {
+          'Email': email,
+          'Password': hashedPassword,
+        },
       );
 
       _manager.sendTo(player, this);

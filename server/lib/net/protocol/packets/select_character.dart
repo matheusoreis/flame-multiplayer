@@ -9,26 +9,26 @@ import 'package:server/net/protocol/packets/alert.dart';
 import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
-class CharacterList implements Packet {
+class SelectCharacter implements Packet {
   final Services _services;
   late Listener _manager;
   late Postgres _pg;
   late Logger _logger;
 
-  CharacterList() : _services = Services() {
+  SelectCharacter() : _services = Services() {
     _manager = _services.get<Listener>();
     _pg = _services.get<Postgres>();
     _logger = _services.get<Logger>();
   }
 
   @override
-  int header = Headers.characterList.index;
-  late int charactersSlots = 0;
-  late List<Character> characters;
+  int header = Headers.selectCharacter.index;
+  late int characterId;
+  late Player player;
 
   @override
   void deserialize(Reader reader) {
-    return;
+    characterId = reader.u32();
   }
 
   Future<void> _sendAlert(Player player, String message) async {
@@ -41,6 +41,8 @@ class CharacterList implements Packet {
 
   @override
   Future<void> handle(Player player) async {
+    this.player = player;
+
     if (player.getDatabaseId() == null) {
       await _sendAlert(
         player,
@@ -53,20 +55,31 @@ class CharacterList implements Packet {
     try {
       final result = await _pg.query(
         '''
-        SELECT id, name, color, is_male, hair, hair_color, eye, eye_color, shirt, pants, created_at
-        FROM characters
-        WHERE account_id = @accountId
-        ''',
+      SELECT c.* 
+      FROM characters c
+      INNER JOIN character_accounts ca ON c.id = ca.character_id
+      WHERE c.id = @characterId AND ca.account_id = @accountId
+      ''',
         parameters: {
+          'characterId': characterId,
           'accountId': player.getDatabaseId(),
         },
       );
 
-      characters = result.map((row) => Character.fromMap(row)).toList();
+      if (result.isEmpty) {
+        await _sendAlert(
+          player,
+          'Personagem não encontrado ou não pertence à sua conta!',
+        );
+        return;
+      }
+
+      final characterData = result.first;
+      player.setCharacter(characterData);
 
       _manager.sendTo(player, this);
     } catch (e, s) {
-      _logger.error('Erro ao listar os personagens: $e\n$s');
+      _logger.error('Erro ao criar o personagem: $e\n$s');
 
       await _sendAlert(
         player,
@@ -78,23 +91,21 @@ class CharacterList implements Packet {
   @override
   void serialize(Writer writer) {
     writer.u16(header);
-    writer.byte(charactersSlots);
-    writer.byte(characters.length);
 
-    if (characters.isNotEmpty) {
-      for (var character in characters) {
-        writer.u16(character.id);
-        writer.string(character.name);
-        writer.string(character.color);
-        writer.boolean(character.isMale);
-        writer.string(character.hair);
-        writer.string(character.hairColor);
-        writer.string(character.eye);
-        writer.string(character.eyeColor);
-        writer.string(character.shirt);
-        writer.string(character.pants);
-        writer.string(character.createdAt.toIso8601String());
-      }
+    Character? character = player.getCharacter();
+    if (character == null) {
+      return;
     }
+
+    writer.u32(character.id);
+    writer.string(character.name);
+    writer.string(character.color);
+    writer.boolean(character.isMale);
+    writer.string(character.hair);
+    writer.string(character.hairColor);
+    writer.string(character.eye);
+    writer.string(character.eyeColor);
+    writer.string(character.shirt);
+    writer.string(character.pants);
   }
 }

@@ -1,8 +1,8 @@
 import 'package:server/core/player.dart';
-import 'package:server/db/sqlite.dart';
+import 'package:server/db/postgres.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
 import 'package:server/utils/logger.dart';
@@ -10,19 +10,18 @@ import 'package:server/utils/services.dart';
 
 class CreateCharacter implements Packet {
   final Services _services;
-  late Manager _manager;
-  late Sqlite _sqlite;
+  late Listener _manager;
+  late Postgres _pg;
   late Logger _logger;
 
   CreateCharacter() : _services = Services() {
-    _manager = _services.get<Manager>();
-    _sqlite = _services.get<Sqlite>();
+    _manager = _services.get<Listener>();
+    _pg = _services.get<Postgres>();
     _logger = _services.get<Logger>();
   }
 
   @override
   int header = Headers.createCharacter.index;
-  late int databaseId;
   late String name;
   late String color;
   late bool isMale;
@@ -35,7 +34,6 @@ class CreateCharacter implements Packet {
 
   @override
   void deserialize(Reader reader) {
-    databaseId = reader.u16();
     name = reader.string();
     color = reader.string();
     isMale = reader.boolean();
@@ -47,24 +45,22 @@ class CreateCharacter implements Packet {
     pants = reader.string();
   }
 
-  Future<int> _getCharacterSlots() async {
-    final accountResult = await _sqlite.executeQuery(
-      'SELECT characters FROM accounts WHERE id = ?',
-      [databaseId],
+  Future<int> _getCharacterSlots(Player player) async {
+    final result = await _pg.query(
+      'SELECT characters FROM accounts WHERE id = @id',
+      parameters: {'id': player.getDatabaseId()},
     );
 
-    return accountResult.isNotEmpty ? accountResult[0]['characters'] : 3;
+    return result.isNotEmpty ? result.first['characters'] as int : 3;
   }
 
-  Future<int> _getCharacterCount() async {
-    final characterCountResult = await _sqlite.executeQuery(
-      'SELECT COUNT(*) FROM character_accounts WHERE account_id = ?',
-      [databaseId],
+  Future<int> _getCharacterCount(Player player) async {
+    final result = await _pg.query(
+      'SELECT COUNT(*) AS count FROM character_accounts WHERE account_id = @id',
+      parameters: {'id': player.getDatabaseId()},
     );
 
-    bool isNotEmpty = characterCountResult.isNotEmpty;
-
-    return isNotEmpty ? characterCountResult[0]['COUNT(*)'] : 0;
+    return result.isNotEmpty ? result.first['count'] as int : 0;
   }
 
   Future<void> _sendAlert(Player player, String message) async {
@@ -77,9 +73,18 @@ class CreateCharacter implements Packet {
 
   @override
   Future<void> handle(Player player) async {
+    if (player.getDatabaseId() == null) {
+      await _sendAlert(
+        player,
+        'Você precisa estar autenticado para criar um personagem.',
+      );
+
+      return;
+    }
+
     try {
-      final characterSlots = await _getCharacterSlots();
-      final characterCount = await _getCharacterCount();
+      final characterSlots = await _getCharacterSlots(player);
+      final characterCount = await _getCharacterCount(player);
 
       if (characterCount >= characterSlots) {
         await _sendAlert(player, 'Você atingiu o limite de personagens!');
@@ -87,33 +92,40 @@ class CreateCharacter implements Packet {
         return;
       }
 
-      await _sqlite.executeTransaction((db) async {
-        db.execute(
-          'INSERT INTO characters (name, color, is_male, hair, hair_color, eye, eye_color, shirt, pants, created_at) '
-          'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-          [
-            name,
-            color,
-            isMale ? 1 : 0,
-            hair,
-            hairColor,
-            eye,
-            eyeColor,
-            shirt,
-            pants,
-            DateTime.now().toIso8601String(),
-          ],
-        );
+      final result = await _pg.query(
+        '''
+      INSERT INTO characters (
+        name, color, is_male, hair, hair_color, eye, eye_color, shirt, pants, created_at
+      ) VALUES (
+        @name, @color, @is_male, @hair, @hair_color, @eye, @eye_color, @shirt, @pants, NOW()
+      )
+      RETURNING id
+      ''',
+        parameters: {
+          'name': name,
+          'color': color,
+          'is_male': isMale,
+          'hair': hair,
+          'hair_color': hairColor,
+          'eye': eye,
+          'eye_color': eyeColor,
+          'shirt': shirt,
+          'pants': pants,
+        },
+      );
 
-        final newCharacterId = db.select(
-          'SELECT last_insert_rowid() AS id',
-        )[0]['id'];
+      final characterId = result.first['id'] as int;
 
-        db.execute(
-          'INSERT INTO character_accounts (account_id, character_id) VALUES (?, ?)',
-          [databaseId, newCharacterId],
-        );
-      });
+      await _pg.query(
+        '''
+      INSERT INTO character_accounts (account_id, character_id)
+      VALUES (@account_id, @character_id)
+      ''',
+        parameters: {
+          'account_id': player.getDatabaseId(),
+          'character_id': characterId,
+        },
+      );
 
       _manager.sendTo(player, this);
     } catch (e, s) {

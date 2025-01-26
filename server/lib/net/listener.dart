@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:server/core/constants.dart';
 import 'package:server/core/player.dart';
+import 'package:server/db/postgres.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
 import 'package:server/net/protocol/packet.dart';
@@ -10,14 +11,16 @@ import 'package:server/utils/cache.dart';
 import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
-class Manager {
+class Listener {
   final Services _services;
   late final Logger _logger;
   late final Cache _cache;
+  late final Postgres _pg;
 
-  Manager() : _services = Services() {
+  Listener() : _services = Services() {
     _logger = _services.get<Logger>();
     _cache = _services.get<Cache>();
+    _pg = _services.get<Postgres>();
   }
 
   void websocketOpen(HttpRequest request, WebSocket socket) {
@@ -125,15 +128,18 @@ class Manager {
     try {
       final socket = player.getSocket();
 
-      // Reseta o buffer de envio.
-      player.sendBuffer.seek(0);
+      // Limpa o buffer antes do envio.
+      player.getBuffer().seek(0);
 
       // Serializa o pacote.
-      packet.serialize(player.sendBuffer);
+      packet.serialize(player.getBuffer());
 
       // Envia o pacote para o jogador.
-      socket.add(player.sendBuffer.getBuffer());
+      socket.add(player.getBuffer().getBuffer());
       await socket.done;
+
+      // Limpa o buffer após o envio.
+      player.getBuffer().seek(0);
     } catch (e) {
       _logger.error('Erro ao enviar pacote para o jogador ${player.id}: $e');
       await player.disconnect('Erro ao enviar pacote.');
@@ -184,6 +190,7 @@ class Manager {
       );
     }
 
+    await _pg.close();
     await server.close();
     exit(0);
   }

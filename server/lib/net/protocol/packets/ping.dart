@@ -1,17 +1,17 @@
 import 'package:server/core/player.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/utils/services.dart';
 
 class Ping implements Packet {
   final Services _services;
 
-  late Manager _manager;
+  late Listener _manager;
 
   Ping() : _services = Services() {
-    _manager = _services.get<Manager>();
+    _manager = _services.get<Listener>();
   }
 
   @override

@@ -1,20 +1,20 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class Server {
   final Services _services;
   late final Logger _logger;
-  late final Manager _manager;
+  late final Listener _manager;
 
   HttpServer? _httpServer;
 
   Server() : _services = Services() {
     _logger = _services.get<Logger>();
-    _manager = _services.get<Manager>();
+    _manager = _services.get<Listener>();
   }
 
   Future<void> start(int port) async {

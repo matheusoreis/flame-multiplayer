@@ -8,6 +8,7 @@ import 'package:server/net/protocol/packets/create_character.dart';
 import 'package:server/net/protocol/packets/delete_account.dart';
 import 'package:server/net/protocol/packets/delete_character.dart';
 import 'package:server/net/protocol/packets/ping.dart';
+import 'package:server/net/protocol/packets/select_character.dart';
 
 enum Headers {
   ping,
@@ -37,4 +38,5 @@ final Map<Headers, Packet Function()> packets = {
   Headers.characterList: () => CharacterList(),
   Headers.createCharacter: () => CreateCharacter(),
   Headers.deleteCharacter: () => DeleteCharacter(),
+  Headers.selectCharacter: () => SelectCharacter(),
 };

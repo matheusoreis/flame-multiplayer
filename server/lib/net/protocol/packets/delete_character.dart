@@ -1,33 +1,28 @@
 import 'package:server/core/player.dart';
-import 'package:server/db/sqlite.dart';
+import 'package:server/db/postgres.dart';
 import 'package:server/net/buffers/reader.dart';
 import 'package:server/net/buffers/writer.dart';
-import 'package:server/net/manager.dart';
+import 'package:server/net/listener.dart';
 import 'package:server/net/protocol/packet.dart';
 import 'package:server/net/protocol/packets/alert.dart';
-import 'package:server/utils/logger.dart';
 import 'package:server/utils/services.dart';
 
 class DeleteCharacter implements Packet {
   final Services _services;
-  late Manager _manager;
-  late Sqlite _sqlite;
-  late Logger _logger;
+  late Listener _manager;
+  late Postgres _pg;
 
   DeleteCharacter() : _services = Services() {
-    _manager = _services.get<Manager>();
-    _sqlite = _services.get<Sqlite>();
-    _logger = _services.get<Logger>();
+    _manager = _services.get<Listener>();
+    _pg = _services.get<Postgres>();
   }
 
   @override
   int header = Headers.deleteCharacter.index;
-  late int databaseId;
   late int characterId;
 
   @override
   void deserialize(Reader reader) {
-    databaseId = reader.u16();
     characterId = reader.u16();
   }
 
@@ -39,43 +34,58 @@ class DeleteCharacter implements Packet {
     _manager.sendTo(player, alert);
   }
 
-  Future<bool> _doesCharacterBelongToPlayer(int databaseId) async {
-    final result = await _sqlite.executeQuery(
-      'SELECT 1 FROM character_accounts WHERE account_id = ? AND character_id = ?',
-      [databaseId, characterId],
+  Future<bool> _doesCharacterBelongToPlayer(Player player) async {
+    final result = await _pg.query(
+      'SELECT 1 FROM character_accounts WHERE account_id = @accountId AND character_id = @characterId',
+      parameters: {
+        'accountId': player.getDatabaseId(),
+        'characterId': characterId,
+      },
     );
 
     return result.isNotEmpty;
   }
 
   Future<void> _deleteCharacter() async {
-    await _sqlite.executeTransaction((db) async {
-      db.execute(
-        'DELETE FROM character_accounts WHERE character_id = ?',
-        [characterId],
+    await _pg.runTransaction((tx) async {
+      await tx.execute(
+        'DELETE FROM character_accounts WHERE character_id = @characterId',
+        parameters: {'characterId': characterId},
       );
 
-      db.execute(
-        'DELETE FROM characters WHERE id = ?',
-        [characterId],
+      await tx.execute(
+        'DELETE FROM characters WHERE id = @characterId',
+        parameters: {'characterId': characterId},
       );
     });
   }
 
   @override
   Future<void> handle(Player player) async {
+    if (player.getDatabaseId() == null) {
+      await _sendAlert(
+        player,
+        'Você precisa estar autenticado para deletar um personagem.',
+      );
+      return;
+    }
+
     try {
-      if (!await _doesCharacterBelongToPlayer(databaseId)) {
-        await _sendAlert(player, 'Personagem inválido ou não pertence a você.');
+      final doesBelong = await _doesCharacterBelongToPlayer(player);
+
+      if (!doesBelong) {
+        await _sendAlert(
+          player,
+          'Personagem inválido ou não pertence a você.',
+        );
+
         return;
       }
 
       await _deleteCharacter();
 
       _manager.sendTo(player, this);
-    } catch (e, s) {
-      _logger.error('Erro ao apagar o personagem: $e\n$s');
-
+    } catch (e) {
       await _sendAlert(
         player,
         'Erro interno no servidor. Tente novamente mais tarde.',
